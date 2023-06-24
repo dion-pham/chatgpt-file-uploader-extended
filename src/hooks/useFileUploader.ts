@@ -516,21 +516,24 @@ const useFileUploader = () => {
   //   processChunk(currentChunkIndex);
   // };
 
-const createRemainingTextFile = async (startIndex: number) => {
-  const remainingChunks = chunks.slice(startIndex); // Get the remaining chunks
+  const createRemainingTextFile = async (startIndex: number) => {
+    const remainingChunks = chunks.slice(startIndex); // Get the remaining chunks
 
-  const textContent = remainingChunks.join("\n\n"); // Join the remaining chunks with line breaks
+    const textContent = remainingChunks.join("\n\n"); // Join the remaining chunks with line breaks
 
-  const blob = new Blob([textContent], { type: "text/plain" }); // Create a new Blob with the text content
-  const newFileName = `remaining_${fileName}`; // Generate a new file name
+    const blob = new Blob([textContent], { type: "text/plain" }); // Create a new Blob with the text content
+    const newFileName = `remaining_${fileName}`; // Generate a new file name
 
-  const newFile = new File([blob], newFileName, {
-    type: "text/plain",
-    lastModified: Date.now()
-  }); // Create a new File object
+    const newFile = new File([blob], newFileName, {
+      type: "text/plain",
+      lastModified: Date.now(),
+    }); // Create a new File object
 
-  await handleSubmission(newFile); // Call the handleSubmission function with the new file
-};
+    // Wait for 1 minute and 30 seconds before calling handleSubmission
+    await new Promise((resolve) => setTimeout(resolve, 90000));
+
+    await handleSubmission(newFile); // Call the handleSubmission function with the new file
+  };
 
   const observeRegenerateResponseButton = () => {
     const targetNode = document.body;
