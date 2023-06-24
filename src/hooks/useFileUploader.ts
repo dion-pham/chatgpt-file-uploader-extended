@@ -406,79 +406,169 @@ const useFileUploader = () => {
     textarea.dispatchEvent(enterKeyEvent);
   };
 
+
   async function submitConversation(
     text: string,
     part: number,
     done: boolean,
     totalParts: number
   ) {
-    const splittedPrompt = `${part === 1 ? basePrompt : ""}
-${part === 1 ? multipleFilesPrompt : "This is the next part of the file"}`;
+    const subsections = text.trim().split(/\n\n/); // Split text into subsections
+
+    const formattedSubsections = subsections.map((subsection) => subsection.trim());
+
+    const formattedText = formattedSubsections.join('\n\n'); // Join subsections with line breaks
+
+    const splittedPrompt = `${part === 1 ? basePrompt.trim() : ""}
+    ${part === 1 ? multipleFilesPrompt : basePrompt.trim()}\n\n`;
 
     const prePrompt =
       totalParts === 1
-        ? singleFilePrompt
+        ? singleFilePrompt.trim()
         : done
-        ? lastPartPrompt
-        : splittedPrompt;
+          ? `${lastPartPrompt.trim()}\n\n`
+          : `${splittedPrompt.trim()}`;
 
     const promptFilename = `Filename: ${fileName || "Unknown"}`;
-    const promptPart = `Part ${part} of ${totalParts}:`;
-    const promptText = `${text}`;
+    const promptPart = `Part ${part} of ${totalParts}:\n\n`;
+    const promptText = `"${formattedText}"`; // Wrap promptText in quotes
 
-    const prompt = `
-${prePrompt}
-
-${promptFilename}
-
-${promptPart}
-
-"${promptText}"
-`;
+    const prompt = `${prePrompt}\n\n${promptFilename}\n\n${promptPart}${promptText}`;
 
     await simulateEnterKey(prompt);
   }
 
-  const handleFileContent = async (fileContent: string) => {
-    const numChunks = Math.ceil(fileContent.length / chunkSize);
-    setTotalParts(numChunks);
 
-    async function processChunk(i: number) {
-      if (i < numChunks && !isStopRequestedRef.current) {
-        const start = i * chunkSize;
-        const end = start + chunkSize;
-        const chunk = fileContent.slice(start, end);
-        const part = i + 1;
-        // Submit chunk to conversation
+  let currentChunkIndex = 0; // Track the current chunk index
+  let chunks: string[] = []; // Store the chunks globally
+
+  const processChunk = async (i: number) => {
+    if (i < chunks.length && !isStopRequestedRef.current) {
+      const chunk = chunks[i];
+      const part = i + 1;
+
+      // Submit chunk to conversation
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await submitConversation(chunk, part, i === chunks.length - 1, chunks.length);
+
+      setCurrentPart(part);
+
+      // Update the current chunk index
+      currentChunkIndex = i + 1;
+
+      let chatgptReady = false;
+      while (!chatgptReady && !isStopRequestedRef.current) {
         await new Promise((resolve) => setTimeout(resolve, 1000));
-        await submitConversation(chunk, part, i === numChunks - 1, numChunks);
+        console.log("Waiting for chatgpt to be ready...");
+        chatgptReady = !document.querySelector(".text-2xl > span:not(.invisible)");
 
-        setCurrentPart(part);
-        let chatgptReady = false;
-        while (!chatgptReady && !isStopRequestedRef.current) {
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-          console.log("Waiting for chatgpt to be ready...");
-          chatgptReady = !document.querySelector(
-            ".text-2xl > span:not(.invisible)"
-          );
-
-          if (isStopRequestedRef.current) {
-            break;
-          }
+        if (isStopRequestedRef.current) {
+          break;
         }
+      }
 
-        if (!isStopRequestedRef.current) {
-          processChunk(i + 1); // Process the next chunk
-        }
+      if (!isStopRequestedRef.current) {
+        processChunk(i + 1); // Process the next chunk
+      }
+    } else {
+      setIsSubmitting(false);
+      setFile(null);
+      setFileName("");
+      currentChunkIndex = 0; // Reset the current chunk index
+    }
+  };
+
+  const handleFileContent = async (fileContent: string) => {
+    const subtitleEntries = fileContent.trim().split(/\n\s*\n/);
+
+    chunks = [];
+    let currentChunk = "";
+
+    for (const entry of subtitleEntries) {
+      const entrySize = entry.length;
+      const chunkSizeWithEntry = currentChunk.length + entrySize;
+
+      if (chunkSizeWithEntry <= chunkSize) {
+        currentChunk += entry + "\n\n";
       } else {
-        setIsSubmitting(false);
-        setFile(null);
-        setFileName("");
+        chunks.push(currentChunk.trim());
+        currentChunk = entry + "\n\n";
       }
     }
 
-    processChunk(0); // Start the process with the first chunk
+    if (currentChunk.length > 0) {
+      chunks.push(currentChunk.trim());
+    }
+
+    setTotalParts(chunks.length);
+
+    // Resume the upload from the last processed chunk
+    processChunk(currentChunkIndex);
   };
+
+  // // Function to handle interruptions or errors
+  // const handleInterruption = () => {
+  //   // Save the current chunk index to resume from later
+  //   currentChunkIndex = Math.max(currentChunkIndex - 1, 0);
+  //   console.log("Interruption occurred: Regenerate Response button clicked.");
+
+  //   // Call the resume function to continue the submission
+  //   processChunk(currentChunkIndex);
+  // };
+
+const createRemainingTextFile = async (startIndex: number) => {
+  const remainingChunks = chunks.slice(startIndex); // Get the remaining chunks
+
+  const textContent = remainingChunks.join("\n\n"); // Join the remaining chunks with line breaks
+
+  const blob = new Blob([textContent], { type: "text/plain" }); // Create a new Blob with the text content
+  const newFileName = `remaining_${fileName}`; // Generate a new file name
+
+  const newFile = new File([blob], newFileName, {
+    type: "text/plain",
+    lastModified: Date.now()
+  }); // Create a new File object
+
+  await handleSubmission(newFile); // Call the handleSubmission function with the new file
+};
+
+  const observeRegenerateResponseButton = () => {
+    const targetNode = document.body;
+
+    const observer = new MutationObserver((mutationsList) => {
+      for (const mutation of mutationsList) {
+        if (
+          mutation.type === "childList" &&
+          mutation.addedNodes.length > 0 &&
+          mutation.addedNodes[0] instanceof HTMLElement
+        ) {
+          const addedNode = mutation.addedNodes[0] as HTMLElement;
+          const errorMessages = [
+            "an error occurred",
+            "something went wrong",
+            "network error",
+          ];
+
+          for (const errorMessage of errorMessages) {
+            if (addedNode.innerText.toLowerCase().includes(errorMessage)) {
+              createRemainingTextFile(currentChunkIndex); // Create a new text file with the remaining chunks
+              break;
+            }
+          }
+        }
+      }
+    });
+
+    observer.observe(targetNode, { childList: true, subtree: true });
+  };
+
+useEffect(() => {
+  observeRegenerateResponseButton(); // Start observing the "Regenerate Response" button
+}, []); // Empty dependency array to run the effect only once, when the component mounts
+
+
+  // ----------------dont touch below --------------------
+
 
   const readFileAsText = async (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
