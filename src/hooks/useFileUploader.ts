@@ -506,34 +506,34 @@ const useFileUploader = () => {
     processChunk(currentChunkIndex);
   };
 
-  // // Function to handle interruptions or errors
-  // const handleInterruption = () => {
-  //   // Save the current chunk index to resume from later
-  //   currentChunkIndex = Math.max(currentChunkIndex - 1, 0);
-  //   console.log("Interruption occurred: Regenerate Response button clicked.");
+  // Function to handle interruptions or errors
+  const handleInterruption = () => {
+    // Save the current chunk index to resume from later
+    currentChunkIndex = Math.max(currentChunkIndex - 1, 0);
+    console.log("Interruption occurred: Regenerate Response button clicked.");
 
-  //   // Call the resume function to continue the submission
-  //   processChunk(currentChunkIndex);
-  // };
-
-  const createRemainingTextFile = async (startIndex: number) => {
-    const remainingChunks = chunks.slice(startIndex); // Get the remaining chunks
-
-    const textContent = remainingChunks.join("\n\n"); // Join the remaining chunks with line breaks
-
-    const blob = new Blob([textContent], { type: "text/plain" }); // Create a new Blob with the text content
-    const newFileName = `remaining_${fileName}`; // Generate a new file name
-
-    const newFile = new File([blob], newFileName, {
-      type: "text/plain",
-      lastModified: Date.now(),
-    }); // Create a new File object
-
-    // Wait for 1 minute and 30 seconds before calling handleSubmission
-    await new Promise((resolve) => setTimeout(resolve, 90000));
-
-    await handleSubmission(newFile); // Call the handleSubmission function with the new file
+    // Call the resume function to continue the submission
+    processChunk(currentChunkIndex);
   };
+
+//   const createRemainingTextFile = async (startIndex: number) => {
+//     const remainingChunks = chunks.slice(startIndex); // Get the remaining chunks
+
+//     const textContent = remainingChunks.join("\n\n"); // Join the remaining chunks with line breaks
+
+//     const blob = new Blob([textContent], { type: "text/plain" }); // Create a new Blob with the text content
+//     const newFileName = `remaining_${fileName}`; // Generate a new file name
+
+//     const newFile = new File([blob], newFileName, {
+//       type: "text/plain",
+//       lastModified: Date.now(),
+//     }); // Create a new File object
+
+//     // Wait for 1 minute and 30 seconds before calling handleSubmission
+//     await new Promise((resolve) => setTimeout(resolve, 90000));
+
+//     await handleSubmission(newFile); // Call the handleSubmission function with the new file
+//   };
 
   const observeRegenerateResponseButton = () => {
     const targetNode = document.body;
@@ -554,7 +554,7 @@ const useFileUploader = () => {
 
           for (const errorMessage of errorMessages) {
             if (addedNode.innerText.toLowerCase().includes(errorMessage)) {
-              createRemainingTextFile(currentChunkIndex); // Create a new text file with the remaining chunks
+              handleInterruption(); // Create a new text file with the remaining chunks
               break;
             }
           }
